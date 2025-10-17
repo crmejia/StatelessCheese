@@ -2,3 +2,5 @@
 
 /// Application setup.
 pub mod setup;
+
+pub mod app;
