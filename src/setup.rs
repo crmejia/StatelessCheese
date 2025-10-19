@@ -1,6 +1,9 @@
 use alloc::boxed::Box;
+use embedded_dht_rs::dht11::Dht11;
 use esp_hal::{
     clock::CpuClock,
+    delay::Delay,
+    gpio::{Flex, InputConfig, OutputConfig},
     i2c::master::I2c,
     time::{Duration, Instant, Rate},
     Async,
@@ -22,6 +25,9 @@ extern crate alloc;
 pub trait App {
     /// Draw the UI frame.
     fn draw(&self, frame: &mut Frame);
+
+    ///Handle sensor reading events
+    fn read_sensor(&mut self, dht11: &mut Dht11<Flex<'_>, Delay>);
 
     /// Run the application
     fn run(self)
@@ -46,7 +52,19 @@ fn run_app(mut app: impl App) -> ! {
     let peripherals = esp_hal::init(config);
     esp_alloc::heap_allocator!(size: 72 * 1024);
 
-    //set up OLED
+    // set up DHT11
+    let input_config = InputConfig::default();
+    let output_config =
+        OutputConfig::default().with_drive_mode(esp_hal::gpio::DriveMode::OpenDrain);
+    let delay = Delay::new();
+    let mut flex = Flex::new(peripherals.GPIO4);
+    flex.apply_input_config(&input_config);
+    flex.set_input_enable(true);
+    flex.apply_output_config(&output_config);
+    flex.set_output_enable(true);
+    let mut dht11 = Dht11::new(flex, delay);
+
+    //set up OLED: setting up i2c_bus, i2cDisplayInterface, finally display
     let i2c_bus = esp_hal::i2c::master::I2c::new(
         peripherals.I2C0,
         esp_hal::i2c::master::Config::default().with_frequency(Rate::from_khz(400)),
@@ -84,6 +102,7 @@ fn run_app(mut app: impl App) -> ! {
 
         terminal
             .draw(|f| {
+                app.read_sensor(&mut dht11);
                 app.draw(f);
             })
             .unwrap();
