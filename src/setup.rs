@@ -3,7 +3,7 @@ use embedded_dht_rs::dht11::Dht11;
 use esp_hal::{
     clock::CpuClock,
     delay::Delay,
-    gpio::{Flex, InputConfig, OutputConfig},
+    gpio::{Flex, Input, InputConfig, OutputConfig},
     i2c::master::I2c,
     time::{Duration, Instant, Rate},
     Async,
@@ -28,6 +28,9 @@ pub trait App {
 
     ///Handle sensor reading events
     fn read_sensor(&mut self, dht11: &mut Dht11<Flex<'_>, Delay>);
+
+    ///Handle button press events
+    fn handle_press(&mut self, unit_pin: &Input);
 
     /// Run the application
     fn run(self)
@@ -96,6 +99,12 @@ fn run_app(mut app: impl App) -> ! {
     let backend = EmbeddedBackend::new(&mut display, embedded_backend_config);
     let mut terminal = Terminal::new(backend).unwrap();
 
+    //Configure unit button
+    let unit_pin = Input::new(
+        peripherals.GPIO5,
+        InputConfig::default().with_pull(esp_hal::gpio::Pull::Down),
+    );
+
     loop {
         let delay_start = Instant::now();
         while delay_start.elapsed() < Duration::from_millis(500) {}
@@ -103,6 +112,7 @@ fn run_app(mut app: impl App) -> ! {
         terminal
             .draw(|f| {
                 app.read_sensor(&mut dht11);
+                app.handle_press(&unit_pin);
                 app.draw(f);
             })
             .unwrap();

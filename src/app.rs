@@ -1,5 +1,6 @@
 use crate::setup::App;
 
+use esp_hal::gpio::Input;
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Stylize};
 use ratatui::text::{Line, Span};
@@ -18,6 +19,14 @@ extern crate alloc;
 pub struct CheeseTestState {
     temperature: u8,
     humidity: u8,
+    unit: Unit,
+    pressed: bool,
+}
+#[derive(Default, Clone, Copy)]
+enum Unit {
+    #[default]
+    Celcius,
+    Fahrenheit,
 }
 
 pub fn run() {
@@ -35,7 +44,7 @@ impl App for CheeseTestState {
         let [first, second] = main.layout(&horizontal);
 
         render_title_widget(frame, top);
-        render_temperature_widget(frame, first, self.temperature);
+        render_temperature_widget(frame, first, self.temperature, self.unit);
         render_humidity_widget(frame, second, self.humidity);
     }
 
@@ -51,15 +60,35 @@ impl App for CheeseTestState {
             Err(error) => error!("An error occured: {}", defmt::Debug2Format(&error)),
         }
     }
+
+    fn handle_press(&mut self, unit_pin: &Input) {
+        if unit_pin.is_high() && !self.pressed {
+            match self.unit {
+                Unit::Celcius => self.unit = Unit::Fahrenheit,
+                Unit::Fahrenheit => self.unit = Unit::Celcius,
+            }
+            self.pressed = true;
+        }
+        if unit_pin.is_low() && self.pressed {
+            self.pressed = false;
+        }
+    }
 }
 
 fn render_title_widget(frame: &mut Frame, area: Rect) {
     let title = Line::from_iter([Span::from("Stateless").bold(), Span::from("Cheese")]).centered();
     frame.render_widget(title, area);
 }
-fn render_temperature_widget(frame: &mut Frame, area: Rect, temperature: u8) {
+fn render_temperature_widget(frame: &mut Frame, area: Rect, temperature: u8, unit: Unit) {
     let mut text: String<8> = String::new();
-    write!(text, "{temperature}°C").unwrap();
+    match unit {
+        Unit::Celcius => write!(text, "{temperature}°C").unwrap(),
+        Unit::Fahrenheit => {
+            //not really render logic but hey
+            let fahrenheit = (temperature * 9) / 5 + 32;
+            write!(text, "{fahrenheit}°F").unwrap();
+        }
+    }
     let title = "Temperature"; //Temperature is too long on tiny screen
     let block = Block::bordered().title(title);
     let paragraph = Paragraph::new(text.as_str())
